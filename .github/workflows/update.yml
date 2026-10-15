@@ -15,7 +15,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -32,5 +32,7 @@ jobs:
             echo "変更なし"
           else
             git commit -m "商品データ更新 $(TZ=Asia/Tokyo date '+%Y-%m-%d')"
+            # 実行中に別のコミットが入っていても push できるようにする
+            git pull --rebase
             git push
           fi

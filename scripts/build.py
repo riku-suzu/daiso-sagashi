@@ -3,7 +3,7 @@ public/data/ に書き出す。GitHub Actions で毎朝動かす（標準ライ�
 
   python3 scripts/build.py            全部取り直す
   python3 scripts/build.py --news     話題の新商品だけ取り直す
-  python3 scripts/build.py --full     取りこぼしを多めに拾う（初回と同じ量。30 分ほどかかる）
+  python3 scripts/build.py --full     コレクション経由の取得を多めにする（初回と同じ量）
 
 取り方:
   1. /products.json と /collections/all/products.json をそれぞれ最大 2.5 万件（API の上限）
@@ -29,27 +29,46 @@ STATE = ROOT / "data" / "state.json"   # 上限の外にある商品の取得日
 STORE = "https://jp.daisonet.com"
 IMG_PREFIX = "https://cdn.shopify.com/s/files/1/0557/3646/7629/"
 UA = {"User-Agent": "Mozilla/5.0 (compatible; daiso-sagashi/1.0; personal product index, 1 request at a time)"}
-WAIT = 0.25            # リクエストの間隔（秒）
-MAX_SINGLE = 1000      # 1 回の実行で個別に取る商品の上限
-COLLECTION_BUDGET = 400  # 1 回の実行でコレクション経由に使うリクエスト数（初回と --full は 5 倍）
+WAIT = 1.0             # リクエストの間隔（秒）。速すぎると接続を断られる（GitHub 上で 0.25 秒にしたら 10 分で止められた）
+MAX_SINGLE = 500       # 1 回の実行で個別に取る商品の上限
+TIME_LIMIT = 75 * 60   # 取得に使う時間の上限（秒）。超えたら取れた分だけで書き出す
+COLLECTION_BUDGET = 400  # 1 回の実行でコレクション経由に使うリクエスト数（初回と --full は 2 倍）
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
 
-def get(url, tries=6):
+STARTED = time.time()
+_fails = 0
+
+
+class Stop(Exception):
+    """接続を断られ続けている、または時間切れ。ここまでに取れた分で書き出す。"""
+
+
+def get(url, tries=4):
+    global _fails
+    if time.time() - STARTED > TIME_LIMIT:
+        raise Stop("時間切れ")
     # 日本語のハンドル（例：特集-製菓ツール）を含む URL はエンコードする
     url = urllib.parse.quote(url, safe=":/?&=%")
     for i in range(tries):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60) as r:
+                _fails = 0
                 return r.read()
         except urllib.error.HTTPError as e:
             if e.code == 404:
+                _fails = 0
                 return None
-            wait = int(e.headers.get("Retry-After") or 0) or 20 * (i + 1)
-        except Exception:
-            wait = 20 * (i + 1)
-        print(f"  再試行 {i + 1}/{tries}: {url}", file=sys.stderr)
+            reason = f"HTTP {e.code}"
+            wait = min(int(e.headers.get("Retry-After") or 0) or 15 * (i + 1), 120)
+        except Exception as e:
+            reason = type(e).__name__
+            wait = 15 * (i + 1)
+        print(f"  再試行 {i + 1}/{tries}（{reason}）: {url}", file=sys.stderr, flush=True)
         time.sleep(wait)
+    _fails += 1
+    if _fails >= 3:
+        raise Stop(f"接続を断られ続けています（{reason}）")
     raise RuntimeError(f"取得できませんでした: {url}")
 
 
@@ -115,8 +134,9 @@ def record(p):
             flags, int(created or 0), img]
 
 
-def crawl_feed(base, quiet=False):
-    found = {}
+def crawl_feed(base, quiet=False, found=None):
+    # Stop で中断しても、それまでに取れた分は found に残る
+    found = {} if found is None else found
     for page in range(1, 101):
         body = get(f"{base}?limit=250&page={page}")
         products = json.loads(body).get("products", []) if body else []
@@ -157,13 +177,14 @@ def crawl_collections(fresh, listed, start, budget):
             break
         c = cols[i]
         before = len(fresh)
+        got = {}
         try:
-            got = crawl_feed(f"{STORE}/collections/{c['handle']}/products.json", quiet=True)
+            crawl_feed(f"{STORE}/collections/{c['handle']}/products.json", quiet=True, found=got)
         except RuntimeError as e:
             print(f"  コレクション {c['handle']} を飛ばしました: {e}", flush=True)
-            got = {}
-        for h, r in got.items():
-            fresh.setdefault(h, r)
+        finally:
+            for h, r in got.items():
+                fresh.setdefault(h, r)
         used += -(-c["products_count"] // 250)
         if len(fresh) > before:
             print(f"  コレクション {c['handle']}: +{len(fresh) - before}件（未取得 {len(set(listed) - set(fresh))}件）", flush=True)
@@ -197,49 +218,54 @@ def catalog():
             prev[r[0]] = r
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     fetched = state.get("fetched", {})   # 上限の外にある商品を、最後に取り直した日
-
-    # 1. 新しい順の 2 本の一覧（ここで取れた商品は毎日新しい）
-    fresh = crawl_feed(f"{STORE}/products.json")
-    for h, r in crawl_feed(f"{STORE}/collections/all/products.json").items():
-        fresh.setdefault(h, r)
-    main = set(fresh)
-    listed = sitemap()
-
-    # 2. 残りはコレクション経由で、毎日少しずつ。初回（前回データなし）は多めに回る
     full = not prev or "--full" in sys.argv
-    budget = COLLECTION_BUDGET * (5 if full else 1)
-    state["collection_start"] = crawl_collections(fresh, listed, state.get("collection_start", 0), budget)
+
+    fresh, main, listed, single = {}, set(), {}, 0
+    try:
+        # 1. 新しい順の 2 本の一覧（ここで取れた商品は毎日新しい）
+        crawl_feed(f"{STORE}/products.json", found=fresh)
+        crawl_feed(f"{STORE}/collections/all/products.json", found=fresh)
+        main = set(fresh)
+        listed = sitemap()
+
+        # 2. 残りはコレクション経由で、毎日少しずつ。初回と --full は多めに回る
+        budget = COLLECTION_BUDGET * (2 if full else 1)
+        state["collection_start"] = crawl_collections(fresh, listed, state.get("collection_start", 0), budget)
+
+        # 3. まだ足りない商品：新しく増えたものから個別に取り、枠が余れば取り直しが古い順に更新する
+        missing = [h for h in listed if h not in fresh]
+        new = [h for h in missing if h not in prev]
+        stale = sorted((h for h in missing if h in prev), key=lambda h: fetched.get(h, "0"))
+        for h in (new + stale)[:MAX_SINGLE]:
+            try:
+                body = get(f"{STORE}/products/{h}.json", tries=2)
+            except RuntimeError:
+                body = None
+            time.sleep(WAIT)
+            single += 1
+            if body:
+                fresh[h] = record(json.loads(body)["product"])
+    except Stop as e:
+        print(f"  取得を打ち切りました：{e}。取れた分と前回のデータで書き出します", flush=True)
+    main = main or set(fresh)
     for h in set(fresh) - main:
         fetched[h] = today
 
-    # 3. まだ足りない商品：新しく増えたものは個別に取り、前回あったものは前回のデータを使う。
-    #    個別取得の枠が余れば、取り直しが古い順に更新する
-    missing = [h for h in listed if h not in fresh]
-    new = [h for h in missing if h not in prev]
-    stale = sorted((h for h in missing if h in prev), key=lambda h: fetched.get(h, "0"))
-    single = 0
-    for h in new + stale:
-        if single >= MAX_SINGLE * (3 if full else 1):
-            break
-        try:
-            body = get(f"{STORE}/products/{h}.json", tries=3)
-        except RuntimeError:
-            body = None
-        time.sleep(WAIT)
-        single += 1
-        if body:
-            fresh[h] = record(json.loads(body)["product"])
-            fetched[h] = today
-    for h in missing:
+    # 取れなかった商品は前回のデータで埋める
+    known = listed if len(listed) > 1000 else prev   # サイトマップを取れなかったときは前回の商品を全部残す
+    reused = 0
+    for h in known:
         if h not in fresh and h in prev:
             fresh[h] = prev[h]
-    print(f"  個別取得: {single}件／前回のデータを使った商品: {sum(1 for h in missing if h not in fetched or fetched[h] != today)}件", flush=True)
-
-    # サイトマップから消えた商品（販売終了）は落とす。サイトマップの取得に失敗したときは落とさない
+            reused += 1
+    # サイトマップから消えた商品（販売終了）は落とす
     if len(listed) > 1000:
         fresh = {h: r for h, r in fresh.items() if h in listed}
-    state["fetched"] = {h: d for h, d in fetched.items() if h in fresh and h not in main}
+    print(f"  個別取得: {single}件／前回のデータを使った商品: {reused}件", flush=True)
+    if len(listed) > 1000:
+        print(f"  まだ一度も取れていない商品: {sum(1 for h in listed if h not in fresh)}件", flush=True)
 
+    state["fetched"] = {h: d for h, d in fetched.items() if h in fresh and h not in main}
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     return list(fresh.values())
@@ -304,8 +330,12 @@ if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     now = datetime.datetime.now(JST).strftime("%Y-%m-%d %H:%M")
     print("話題の新商品を取得中…", flush=True)
-    (OUT / "news.json").write_text(
-        json.dumps({"updated": now, "items": news()}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    try:
+        (OUT / "news.json").write_text(
+            json.dumps({"updated": now, "items": news()}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    except (RuntimeError, Stop) as e:
+        print(f"  話題の新商品は前回のままにします：{e}", flush=True)
+    _fails = 0
     if "--news" not in sys.argv:
         print("全商品を取得中…", flush=True)
         items = catalog()
