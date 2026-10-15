@@ -3,6 +3,7 @@ public/data/ に書き出す。GitHub Actions で毎朝動かす（標準ライ�
 
   python3 scripts/build.py            全部取り直す
   python3 scripts/build.py --news     話題の新商品だけ取り直す
+  python3 scripts/build.py --full     取りこぼしを多めに拾う（初回と同じ量。30 分ほどかかる）
 
 取り方:
   1. /products.json と /collections/all/products.json をそれぞれ最大 2.5 万件（API の上限）
@@ -17,6 +18,7 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -29,11 +31,13 @@ IMG_PREFIX = "https://cdn.shopify.com/s/files/1/0557/3646/7629/"
 UA = {"User-Agent": "Mozilla/5.0 (compatible; daiso-sagashi/1.0; personal product index, 1 request at a time)"}
 WAIT = 0.25            # リクエストの間隔（秒）
 MAX_SINGLE = 1000      # 1 回の実行で個別に取る商品の上限
-COLLECTION_BUDGET = 400  # 1 回の実行でコレクション経由に使うリクエスト数（初回は 4 倍）
+COLLECTION_BUDGET = 400  # 1 回の実行でコレクション経由に使うリクエスト数（初回と --full は 5 倍）
 JST = datetime.timezone(datetime.timedelta(hours=9))
 
 
 def get(url, tries=6):
+    # 日本語のハンドル（例：特集-製菓ツール）を含む URL はエンコードする
+    url = urllib.parse.quote(url, safe=":/?&=%")
     for i in range(tries):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=60) as r:
@@ -153,7 +157,12 @@ def crawl_collections(fresh, listed, start, budget):
             break
         c = cols[i]
         before = len(fresh)
-        for h, r in crawl_feed(f"{STORE}/collections/{c['handle']}/products.json", quiet=True).items():
+        try:
+            got = crawl_feed(f"{STORE}/collections/{c['handle']}/products.json", quiet=True)
+        except RuntimeError as e:
+            print(f"  コレクション {c['handle']} を飛ばしました: {e}", flush=True)
+            got = {}
+        for h, r in got.items():
             fresh.setdefault(h, r)
         used += -(-c["products_count"] // 250)
         if len(fresh) > before:
@@ -197,7 +206,8 @@ def catalog():
     listed = sitemap()
 
     # 2. 残りはコレクション経由で、毎日少しずつ。初回（前回データなし）は多めに回る
-    budget = COLLECTION_BUDGET * (4 if not prev else 1)
+    full = not prev or "--full" in sys.argv
+    budget = COLLECTION_BUDGET * (5 if full else 1)
     state["collection_start"] = crawl_collections(fresh, listed, state.get("collection_start", 0), budget)
     for h in set(fresh) - main:
         fetched[h] = today
@@ -209,9 +219,12 @@ def catalog():
     stale = sorted((h for h in missing if h in prev), key=lambda h: fetched.get(h, "0"))
     single = 0
     for h in new + stale:
-        if single >= MAX_SINGLE:
+        if single >= MAX_SINGLE * (3 if full else 1):
             break
-        body = get(f"{STORE}/products/{h}.json")
+        try:
+            body = get(f"{STORE}/products/{h}.json", tries=3)
+        except RuntimeError:
+            body = None
         time.sleep(WAIT)
         single += 1
         if body:
