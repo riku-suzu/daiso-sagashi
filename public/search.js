@@ -130,6 +130,8 @@
   function buildIndex(items, catNames, brandLabels) {
     for (const it of items) {
       it._t = norm(it.title);
+      // かっこや区切りより前の「商品名の頭」。日本語は最後の語が何の商品かを表す（三徳包丁、マグネットフック）
+      it._h = norm(it.title.split(/[（(【\[「〈《―－\-‐　 ]/)[0]);
       it._c = norm(it.cats.map((i) => catNames[i]).join(" ") + " " + it.words + " " + (brandLabels[it.brand] || ""));
     }
   }
@@ -155,10 +157,12 @@
       for (const a of t.alts) {
         const exactWord = a === t.word;
         let s = 0;
-        if (it._t === a) s = 60;
+        if (it._t === a || it._h === a) s = 60;
         else if (it._t.startsWith(a)) s = 30;
         else if (it._t.includes(a)) s = 20;
         else if (it._c.includes(a)) s = 8;
+        // 「はさみ」で探したとき、ハサミホルダーよりハサミそのものを上にする
+        if (s >= 20 && s < 60 && it._h.endsWith(a)) s += 14;
         // 入力どおりの語で当たったものを、言い換えで当たったものより必ず上にする
         if (s && !exactWord) s *= 0.3;
         // 商品名とカテゴリの両方に当たるもの（「はさみ」で探したときの本物のハサミ）を少し上げる
