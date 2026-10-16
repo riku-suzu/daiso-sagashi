@@ -4,7 +4,6 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const STORE = "https://jp.daisonet.com/products/";
   const BRAND = { daiso: "DAISO", sp: "Standard Products", tp: "THREEPPY" };
-  const BRAND_SHORT = { daiso: "DAISO", sp: "SP", tp: "THREEPPY" };
   const PRICES = [110, 220, 330, 440, 550, 770, 1100, 1650, 2200, 3300, 5500];
   const PAGE = 48;
   const WD = ["日", "月", "火", "水", "木", "金", "土"];
@@ -88,7 +87,7 @@
     const bc = { daiso: 0, sp: 0, tp: 0 };
     for (const h of current.hits) if (passes(h.item, "brand")) bc[h.item.brand]++;
     $("#f-brand").innerHTML = Object.keys(BRAND).map((b) =>
-      `<label class="check"><input type="checkbox" value="${b}" ${state.brands.has(b) ? "checked" : ""}> ${BRAND[b]}<span class="n">${bc[b].toLocaleString()}</span></label>`).join("");
+      `<label class="check"><input type="checkbox" value="${b}" ${state.brands.has(b) ? "checked" : ""}><span class="tri b-${b}" aria-hidden="true"></span>${BRAND[b]}<span class="n">${bc[b].toLocaleString()}</span></label>`).join("");
 
     // カテゴリ（いまの階層の 1 つ下を数える）
     const level = state.cat.length;
@@ -166,25 +165,19 @@
     return out + (open ? "</mark>" : "");
   }
   const yen = (n) => n.toLocaleString();
-  function priceHTML(it) {
-    const p = it.price === it.priceMax ? yen(it.price) : `${yen(it.price)}～${yen(it.priceMax)}`;
-    return `<span>${p}<em>円</em></span>`;
-  }
+  // 100円（税込110円、食品は108円）の商品は値札を出さない
+  const isBasic = (lo, hi) => lo === hi && lo <= 110;
+  const priceTag = (text) => `<span class="pricetag">${esc(text).replace(/円$/, "<em>円</em>")}</span>`;
   function card(it, terms) {
     const flag = it.flags & 2 ? `<span class="flag">廃盤</span>`
       : !(it.flags & 1) ? `<span class="flag">在庫なし</span>`
       : todayDay - it.day <= 30 ? `<span class="flag new">NEW</span>` : "";
     const img = it.img ? (it.img.startsWith("http") ? it.img : imgBase + it.img) + "?width=360" : "";
-    const path = it.cats.slice(0, 2).map(catName).join(" › ");
-    return `<a class="card ${it.flags & 1 ? "" : "out"}" href="${STORE}${encodeURIComponent(it.handle)}" target="_blank" rel="noopener">
-      <div class="thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">` : ""}
-        <span class="badge ${it.brand}">${BRAND_SHORT[it.brand]}</span>${flag}</div>
-      <div class="body">
-        <div class="title">${highlight(it.title, terms)}</div>
-        <div class="path">${esc(path)}</div>
-        ${/^\d{8,13}$/.test(it.handle) ? `<div class="jan">JAN ${it.handle}</div>` : ""}
-      </div>
-      <div class="price"><small>税込</small>${priceHTML(it)}</div>
+    const price = isBasic(it.price, it.priceMax) ? ""
+      : priceTag(it.price === it.priceMax ? `${yen(it.price)}円` : `${yen(it.price)}〜${yen(it.priceMax)}円`);
+    return `<a class="card b-${it.brand} ${it.flags & 1 ? "" : "out"}" href="${STORE}${encodeURIComponent(it.handle)}" target="_blank" rel="noopener">
+      <div class="thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">` : ""}${flag}${price}</div>
+      <div class="title"><span class="sr">${BRAND[it.brand]}：</span>${highlight(it.title, terms)}</div>
     </a>`;
   }
 
@@ -287,16 +280,14 @@
     $("#news").innerHTML = groups.map((g) => {
       const d = new Date(g.date + "T00:00:00");
       return `<section class="day"><div class="day-head"><span class="day-date">${g.date.slice(5).replace("-", ".")}</span><span class="day-wd">${WD[d.getDay()]}曜日</span><span class="day-count">${g.items.length}件</span></div>
-        <div class="grid news">${g.items.map((n) => `<div class="card">
-          <a class="thumb" href="${esc(n.url)}" target="_blank" rel="noopener"><img src="${esc(n.image)}" alt="" loading="lazy" decoding="async"><span class="badge">DAISO</span></a>
-          <div class="body">
-            ${n.lead ? `<div class="lead">${esc(n.lead)}</div>` : ""}
-            <a class="title" href="${esc(n.url)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none">${esc(n.title)}</a>
-            ${n.desc ? `<div class="desc">${esc(n.desc)}</div>` : ""}
-            <button type="button" class="find" data-find="${esc(n.jan && n.jan.length ? n.jan.join(" | ") : n.title)}">ネットストアで探す →</button>
-          </div>
-          ${n.price ? `<div class="price"><small>税込</small><span>${esc(n.price).replace(/円$/, "<em>円</em>")}</span></div>` : ""}
-        </div>`).join("")}</div></section>`;
+        <div class="grid news">${g.items.map((n) => {
+          const basic = /^10[0-9]円$|^110円$/.test(n.price);
+          return `<div class="card b-daiso">
+          <a class="thumb" href="${esc(n.url)}" target="_blank" rel="noopener"><img src="${esc(n.image)}" alt="" loading="lazy" decoding="async">${n.price && !basic ? priceTag(n.price.replace("～", "〜")) : ""}</a>
+          <a class="title" href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.title)}</a>
+          <button type="button" class="find" data-find="${esc(n.jan && n.jan.length ? n.jan.join(" | ") : n.title)}">ネットストアで探す →</button>
+        </div>`;
+        }).join("")}</div></section>`;
     }).join("");
   }
 
@@ -306,6 +297,7 @@
     $("#form").hidden = v !== "search";
     $("#hint").hidden = v !== "search";
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
+    $("#tabs").dataset.active = v;
     history.replaceState(null, "", location.search + (v === "news" ? "#news" : ""));
   }
 
@@ -388,7 +380,24 @@
     scrim.className = "scrim"; scrim.hidden = true;
     document.body.append(scrim);
     const openSheet = (open) => { sheet.classList.toggle("open", open); scrim.hidden = !open; };
-    $("#filterOpen").addEventListener("click", () => openSheet(true));
+    const phone = matchMedia("(max-width: 820px)");
+    const setCollapsed = (c) => {
+      $("#view-search").classList.toggle("collapsed", c);
+      $("#filterOpen").setAttribute("aria-expanded", String(!c));
+      $("#filterOpen").title = c ? "絞り込みを表示" : "絞り込みをしまう";
+      store.set("filtersCollapsed", c);
+    };
+    setCollapsed(store.get("filtersCollapsed", false));
+    $("#filterOpen").addEventListener("click", () => {
+      if (phone.matches) openSheet(true);
+      else setCollapsed(!$("#view-search").classList.contains("collapsed"));
+    });
+    // 項目ごとの開け閉めも覚えておく
+    document.querySelectorAll("details.fgroup").forEach((d) => {
+      const saved = store.get("open-" + d.id, null);
+      if (saved !== null) d.open = saved;
+      d.addEventListener("toggle", () => store.set("open-" + d.id, d.open));
+    });
     $("#sheetClose").addEventListener("click", () => openSheet(false));
     scrim.addEventListener("click", () => openSheet(false));
 

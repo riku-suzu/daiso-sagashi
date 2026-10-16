@@ -16,7 +16,8 @@
 <header class="top wrap">
   <div class="brandline">
     <h1><span class="d">ダイソー</span>さがし帳</h1>
-    <nav class="tabs" role="tablist" aria-label="表示の切り替え">
+    <nav class="tabs" id="tabs" role="tablist" aria-label="表示の切り替え" data-active="search">
+      <span class="tab-thumb" aria-hidden="true"></span>
       <button type="button" role="tab" id="tab-search" aria-selected="true" data-view="search">全商品から探す</button>
       <button type="button" role="tab" id="tab-news" aria-selected="false" data-view="news">話題の新商品</button>
     </nav>
@@ -35,26 +36,26 @@
 <main class="wrap">
   <section id="view-search" class="layout">
     <aside class="filters" id="filters" aria-label="絞り込み">
-      <div class="fgroup">
-        <h2>ブランド</h2>
+      <details class="fgroup" id="g-brand" open>
+        <summary>ブランド</summary>
         <div class="checks" id="f-brand"></div>
-      </div>
-      <div class="fgroup">
-        <h2>カテゴリ</h2>
+      </details>
+      <details class="fgroup" id="g-cat" open>
+        <summary>カテゴリ</summary>
         <div id="f-cat" class="cattree"></div>
-      </div>
-      <div class="fgroup">
-        <h2>価格（税込）</h2>
+      </details>
+      <details class="fgroup" id="g-price" open>
+        <summary>価格（税込）</summary>
         <div class="price-row">
           <select id="f-min" aria-label="下限"></select><span>〜</span><select id="f-max" aria-label="上限"></select>
         </div>
-      </div>
-      <div class="fgroup">
-        <h2>そのほか</h2>
+      </details>
+      <details class="fgroup" id="g-other" open>
+        <summary>そのほか</summary>
         <label class="toggle"><input type="checkbox" id="f-stock"> ネット在庫ありだけ</label>
         <label class="toggle"><input type="checkbox" id="f-new"> 30日以内に登録</label>
         <label class="toggle"><input type="checkbox" id="f-hidediscon" checked> 廃盤を隠す</label>
-      </div>
+      </details>
       <button type="button" class="reset" id="reset">条件をすべて外す</button>
     </aside>
 
@@ -62,7 +63,7 @@
       <div class="resbar">
         <div class="count" id="count" aria-live="polite">読み込み中…</div>
         <div class="resbar-right">
-          <button type="button" class="filter-open" id="filterOpen">絞り込み<span id="filterBadge"></span></button>
+          <button type="button" class="filter-open" id="filterOpen" aria-controls="filters" aria-expanded="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg><span class="fo-label">絞り込み</span><span id="filterBadge"></span></button>
           <select id="sort" aria-label="並び順">
             <option value="rel">関連度順</option>
             <option value="new">新しい順</option>
@@ -87,7 +88,7 @@
   <footer>
     <div id="updated"></div>
     <div>出典：<a href="https://jp.daisonet.com/collections/all" target="_blank" rel="noopener">ダイソーネットストア</a> ／ <a href="https://www.daiso-sangyo.co.jp/item" target="_blank" rel="noopener">DAISO公式企業サイト「話題の新商品」</a>。毎朝自動で取り直しています。</div>
-    <div>価格は税込。在庫はネットストアのもので、店舗の在庫とは違います。店舗の品揃えは店ごとに異なります。</div>
+    <div>左上の三角形の色はブランドです（ピンク：DAISO、グレー：Standard Products、ベージュ：THREEPPY）。価格は税込で、100円（税込110円）の商品は値段を省いています。在庫はネットストアのもので、店舗の在庫とは違います。店舗の品揃えは店ごとに異なります。</div>
   </footer>
 </main>
 
