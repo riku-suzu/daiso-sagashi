@@ -196,17 +196,20 @@ footer a { color: inherit; }
     position: fixed; inset: auto 0 0 0; top: auto; z-index: 40; max-height: 82vh;
     background: var(--surface); border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgb(0 0 0 / .25);
     padding: 0 18px calc(18px + env(safe-area-inset-bottom, 0px));
-    transform: translateY(105%); transition: transform .22s ease; visibility: hidden;
+    /* 閉じるときは下がりきってから見えなくする */
+    transform: translateY(105%); visibility: hidden;
+    transition: transform .42s cubic-bezier(.32, .72, 0, 1), visibility 0s linear .42s;
   }
-  .filters.open { transform: none; visibility: visible; }
+  .filters.open { transform: none; visibility: visible; transition: transform .46s cubic-bezier(.32, .72, 0, 1), visibility 0s; }
   .side-head { position: sticky; top: 0; z-index: 1; background: var(--surface); padding: 14px 0 10px; }
   .side-close { background: var(--fg); color: var(--bg); border-radius: 999px; padding: 6px 14px; }
-  .scrim { position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / .35); }
+  .scrim { position: fixed; inset: 0; z-index: 35; background: rgb(0 0 0 / .35); opacity: 0; pointer-events: none; transition: opacity .36s ease; }
+  .scrim.show { opacity: 1; pointer-events: auto; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 10px; }
   .hint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card, .filters, .tab-thumb, .tabs button { transition: none; }
+  .card, .filters, .filters.open, .scrim, .tab-thumb, .tabs button { transition: none; }
   .card:hover { transform: none; }
   .skeleton { animation: none; }
 }

@@ -374,20 +374,72 @@
       new IntersectionObserver((es) => { if (es[0].isIntersecting && !$("#view-search").hidden) showMore(); }, { rootMargin: "800px" }).observe($("#sentinel"));
     }
 
-    // スマホの絞り込みシート
+    // スマホの絞り込みシート（動きは CSS の transition）
     const sheet = $("#filters");
     const scrim = document.createElement("div");
-    scrim.className = "scrim"; scrim.hidden = true;
+    scrim.className = "scrim";
     document.body.append(scrim);
-    const openSheet = (open) => { sheet.classList.toggle("open", open); scrim.hidden = !open; };
+    const openSheet = (open) => { sheet.classList.toggle("open", open); scrim.classList.toggle("show", open); };
     const phone = matchMedia("(max-width: 820px)");
+
     // パソコン：絞り込み欄をまるごと閉じて、左端の細い帯から開き直す
-    const setCollapsed = (c) => {
+    const applyCollapsed = (c) => {
       $("#view-search").classList.toggle("collapsed", c);
       $("#railOpen").setAttribute("aria-expanded", String(!c));
       store.set("filtersCollapsed", c);
     };
-    setCollapsed(store.get("filtersCollapsed", false));
+    applyCollapsed(store.get("filtersCollapsed", false));
+
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    const EASE_OUT = "cubic-bezier(.22, .8, .24, 1)";
+    let busy = false;
+    // 並びが変わる前後の位置を測り、カードを前の位置から新しい位置へすべらせる（FLIP）
+    function flip(change) {
+      const els = [...document.querySelectorAll("#grid .card, .resbar, .chips")].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.bottom > -100 && r.top < innerHeight + 100;
+      });
+      const before = new Map(els.map((el) => [el, el.getBoundingClientRect()]));
+      change();
+      const anims = [];
+      for (const el of els) {
+        const a = before.get(el), b = el.getBoundingClientRect();
+        if (!b.width) continue;
+        const dx = a.left - b.left, dy = a.top - b.top, sx = a.width / b.width, sy = a.height / b.height;
+        if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(sx - 1) < .01) continue;
+        // 縦横比を保つため、カードは幅の比で拡大縮小する
+        const scale = el.classList.contains("card") ? `scale(${sx})` : "";
+        anims.push(el.animate(
+          [{ transformOrigin: "0 0", transform: `translate(${dx}px, ${dy}px) ${scale}` }, { transformOrigin: "0 0", transform: "none" }],
+          { duration: 420, easing: EASE_OUT }).finished.catch(() => {}));
+      }
+      return Promise.all(anims);
+    }
+    async function setCollapsed(c) {
+      if (busy || $("#view-search").classList.contains("collapsed") === c) return;
+      if (reduceMotion.matches) { applyCollapsed(c); return; }
+      busy = true;
+      const side = $("#filters"), rail = $("#railOpen");
+      if (c) {
+        // 閉じる：欄が左へ抜ける → カードが広がる → 帯が出る
+        const out = side.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateX(-18px)" }],
+          { duration: 170, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" });
+        await out.finished.catch(() => {});
+        const moving = flip(() => { applyCollapsed(true); out.cancel(); });
+        rail.animate([{ opacity: 0, transform: "translateX(-10px)" }, { opacity: 1, transform: "none" }],
+          { duration: 260, delay: 160, easing: EASE_OUT, fill: "backwards" });
+        await moving;
+      } else {
+        // 開く：帯が消える → カードが縮む間に、欄が左から入ってくる
+        const out = rail.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 110, easing: "ease-in", fill: "forwards" });
+        await out.finished.catch(() => {});
+        const moving = flip(() => { applyCollapsed(false); out.cancel(); });
+        side.animate([{ opacity: 0, transform: "translateX(-18px)" }, { opacity: 1, transform: "none" }],
+          { duration: 320, delay: 90, easing: EASE_OUT, fill: "backwards" });
+        await moving;
+      }
+      busy = false;
+    }
     $("#sideClose").addEventListener("click", () => (phone.matches ? openSheet(false) : setCollapsed(true)));
     $("#railOpen").addEventListener("click", () => setCollapsed(false));
     $("#filterOpen").addEventListener("click", () => openSheet(true));
