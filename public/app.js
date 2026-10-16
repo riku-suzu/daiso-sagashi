@@ -394,8 +394,8 @@
     const EASE_OUT = "cubic-bezier(.22, .8, .24, 1)";
     let busy = false;
     // 並びが変わる前後の位置を測り、カードを前の位置から新しい位置へすべらせる（FLIP）
-    function flip(change) {
-      const els = [...document.querySelectorAll("#grid .card, .resbar, .chips")].filter((el) => {
+    function flip(change, extra = "") {
+      const els = [...document.querySelectorAll("#grid .card, .resbar, .chips, .notice" + extra)].filter((el) => {
         const r = el.getBoundingClientRect();
         return r.bottom > -100 && r.top < innerHeight + 100;
       });
@@ -445,18 +445,36 @@
     $("#filterOpen").addEventListener("click", () => openSheet(true));
 
     // 検索バーの開け閉め
-    const setSearchOpen = (open) => {
+    const applySearchOpen = (open) => {
       document.body.classList.toggle("search-closed", !open);
       $("#searchToggle").setAttribute("aria-expanded", String(open));
       $("#searchToggle").title = $("#searchToggleLabel").textContent = open ? "検索バーを閉じる" : "検索する";
       store.set("searchOpen", open);
     };
-    setSearchOpen(store.get("searchOpen", true));
-    $("#searchToggle").addEventListener("click", () => {
-      const open = document.body.classList.contains("search-closed");
-      setSearchOpen(open);
-      if (open) $("#q").focus();
-    });
+    applySearchOpen(store.get("searchOpen", true));
+    // 絞り込み欄と同じ考え方：検索欄が上へ抜け（入り）、その下の一覧は前の位置からすべって動く
+    let searchBusy = false;
+    async function setSearchOpen(open) {
+      if (searchBusy) return;
+      const parts = [$("#form"), $("#hint")];
+      const below = ", #filters, #railOpen";
+      if (reduceMotion.matches) { applySearchOpen(open); if (open) $("#q").focus(); return; }
+      searchBusy = true;
+      if (!open) {
+        const outs = parts.map((el) => el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-10px)" }],
+          { duration: 160, easing: "cubic-bezier(.4, 0, 1, 1)", fill: "forwards" }));
+        await Promise.all(outs.map((a) => a.finished.catch(() => {})));
+        await flip(() => { applySearchOpen(false); outs.forEach((a) => a.cancel()); }, below);
+      } else {
+        const moving = flip(() => applySearchOpen(true), below);
+        parts.forEach((el, i) => el.animate([{ opacity: 0, transform: "translateY(-10px)" }, { opacity: 1, transform: "none" }],
+          { duration: 300, delay: 120 + i * 50, easing: EASE_OUT, fill: "backwards" }));
+        $("#q").focus({ preventScroll: true });
+        await moving;
+      }
+      searchBusy = false;
+    }
+    $("#searchToggle").addEventListener("click", () => setSearchOpen(document.body.classList.contains("search-closed")));
     scrim.addEventListener("click", () => openSheet(false));
 
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
