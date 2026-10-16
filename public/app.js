@@ -298,6 +298,7 @@
     $("#hint").hidden = v !== "search";
     document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
     $("#tabs").dataset.active = v;
+    $("#searchToggle").hidden = v !== "search";
     history.replaceState(null, "", location.search + (v === "news" ? "#news" : ""));
   }
 
@@ -375,30 +376,35 @@
 
     // スマホの絞り込みシート
     const sheet = $("#filters");
-    sheet.insertAdjacentHTML("afterbegin", `<div class="sheet-head"><b>絞り込み</b><button type="button" id="sheetClose">結果を見る</button></div>`);
     const scrim = document.createElement("div");
     scrim.className = "scrim"; scrim.hidden = true;
     document.body.append(scrim);
     const openSheet = (open) => { sheet.classList.toggle("open", open); scrim.hidden = !open; };
     const phone = matchMedia("(max-width: 820px)");
+    // パソコン：絞り込み欄をまるごと閉じて、左端の細い帯から開き直す
     const setCollapsed = (c) => {
       $("#view-search").classList.toggle("collapsed", c);
-      $("#filterOpen").setAttribute("aria-expanded", String(!c));
-      $("#filterOpen").title = c ? "絞り込みを表示" : "絞り込みをしまう";
+      $("#railOpen").setAttribute("aria-expanded", String(!c));
       store.set("filtersCollapsed", c);
     };
     setCollapsed(store.get("filtersCollapsed", false));
-    $("#filterOpen").addEventListener("click", () => {
-      if (phone.matches) openSheet(true);
-      else setCollapsed(!$("#view-search").classList.contains("collapsed"));
+    $("#sideClose").addEventListener("click", () => (phone.matches ? openSheet(false) : setCollapsed(true)));
+    $("#railOpen").addEventListener("click", () => setCollapsed(false));
+    $("#filterOpen").addEventListener("click", () => openSheet(true));
+
+    // 検索バーの開け閉め
+    const setSearchOpen = (open) => {
+      document.body.classList.toggle("search-closed", !open);
+      $("#searchToggle").setAttribute("aria-expanded", String(open));
+      $("#searchToggle").title = $("#searchToggleLabel").textContent = open ? "検索バーを閉じる" : "検索する";
+      store.set("searchOpen", open);
+    };
+    setSearchOpen(store.get("searchOpen", true));
+    $("#searchToggle").addEventListener("click", () => {
+      const open = document.body.classList.contains("search-closed");
+      setSearchOpen(open);
+      if (open) $("#q").focus();
     });
-    // 項目ごとの開け閉めも覚えておく
-    document.querySelectorAll("details.fgroup").forEach((d) => {
-      const saved = store.get("open-" + d.id, null);
-      if (saved !== null) d.open = saved;
-      d.addEventListener("toggle", () => store.set("open-" + d.id, d.open));
-    });
-    $("#sheetClose").addEventListener("click", () => openSheet(false));
     scrim.addEventListener("click", () => openSheet(false));
 
     document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
