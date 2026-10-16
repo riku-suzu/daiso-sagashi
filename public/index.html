@@ -59,9 +59,12 @@
         <div id="f-cat" class="cattree"></div>
       </div>
       <div class="fgroup">
-        <h2>価格（税込）</h2>
-        <div class="price-row">
-          <select id="f-min" aria-label="下限"></select><span>〜</span><select id="f-max" aria-label="上限"></select>
+        <h2>価格</h2>
+        <div class="seg seg-3" id="f-price" role="radiogroup" aria-label="価格" data-active="0">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <button type="button" role="radio" data-price="" aria-checked="true">すべて</button>
+          <button type="button" role="radio" data-price="basic" aria-checked="false">100円</button>
+          <button type="button" role="radio" data-price="other" aria-checked="false">100円以外</button>
         </div>
       </div>
       <div class="fgroup">
@@ -78,12 +81,11 @@
         <div class="count" id="count" aria-live="polite">読み込み中…</div>
         <div class="resbar-right">
           <button type="button" class="filter-open" id="filterOpen" aria-controls="filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg><span class="fo-label">絞り込み</span><span id="filterBadge"></span></button>
-          <select id="sort" aria-label="並び順">
-            <option value="rel">関連度順</option>
-            <option value="new">新しい順</option>
-            <option value="cheap">安い順</option>
-            <option value="high">高い順</option>
-          </select>
+          <div class="seg seg-2" id="sort" role="radiogroup" aria-label="並び順" data-active="0">
+            <span class="seg-thumb" aria-hidden="true"></span>
+            <button type="button" role="radio" data-sort="rel" aria-checked="true" title="検索語によく合う順。ネット在庫のある商品を先に出します">おすすめ</button>
+            <button type="button" role="radio" data-sort="new" aria-checked="false" title="ネットストアに登録された日が新しい順">新着</button>
+          </div>
         </div>
       </div>
       <div class="chips" id="chips"></div>

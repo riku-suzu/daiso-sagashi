@@ -4,13 +4,17 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const STORE = "https://jp.daisonet.com/products/";
   const BRAND = { daiso: "DAISO", sp: "Standard Products", tp: "THREEPPY" };
-  const PRICES = [110, 220, 330, 440, 550, 770, 1100, 1650, 2200, 3300, 5500];
+  // 動き：減らす設定の人には付けない。止まり方はどこも同じカーブにそろえる
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const EASE_OUT = "cubic-bezier(.22, .8, .24, 1)";
+  const EASE_IN = "cubic-bezier(.4, 0, 1, 1)";
+  const done = (a) => a.finished.catch(() => {});
   const PAGE = 48;
   const WD = ["日", "月", "火", "水", "木", "金", "土"];
 
   let items = [], cats = [], imgBase = "", todayDay = 0;
   let current = { hits: [], mode: "none" }, filtered = [];
-  const state = { q: "", brands: new Set(), cat: [], min: 0, max: 0, stock: false, fresh: false, hideDiscon: true, sort: "rel", shown: PAGE };
+  const state = { q: "", brands: new Set(), cat: [], price: "", stock: false, fresh: false, hideDiscon: true, sort: "rel", shown: PAGE };
 
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -24,20 +28,18 @@
     state.q = p.get("q") || "";
     state.brands = new Set((p.get("brand") || "").split(",").filter((b) => BRAND[b]));
     state.cat = (p.get("cat") || "").split(">").filter(Boolean);
-    state.min = +p.get("min") || 0;
-    state.max = +p.get("max") || 0;
+    state.price = ["basic", "other"].includes(p.get("price")) ? p.get("price") : "";
     state.stock = p.get("stock") === "1";
     state.fresh = p.get("new") === "1";
     state.hideDiscon = p.get("discon") !== "1";
-    state.sort = p.get("sort") || "rel";
+    state.sort = p.get("sort") === "new" ? "new" : "rel";
   }
   function writeURL() {
     const p = new URLSearchParams();
     if (state.q) p.set("q", state.q);
     if (state.brands.size) p.set("brand", [...state.brands].join(","));
     if (state.cat.length) p.set("cat", state.cat.join(">"));
-    if (state.min) p.set("min", state.min);
-    if (state.max) p.set("max", state.max);
+    if (state.price) p.set("price", state.price);
     if (state.stock) p.set("stock", "1");
     if (state.fresh) p.set("new", "1");
     if (!state.hideDiscon) p.set("discon", "1");
@@ -51,22 +53,20 @@
   function passes(it, skip) {
     if (skip !== "brand" && state.brands.size && !state.brands.has(it.brand)) return false;
     if (skip !== "cat") for (let i = 0; i < state.cat.length; i++) if (catName(it.cats[i]) !== state.cat[i]) return false;
-    if (state.min && it.priceMax < state.min) return false;
-    if (state.max && it.price > state.max) return false;
+    if (state.price && isBasic(it.price, it.priceMax) !== (state.price === "basic")) return false;
     if (state.stock && !(it.flags & 1)) return false;
     if (state.hideDiscon && it.flags & 2) return false;
     if (state.fresh && todayDay - it.day > 30) return false;
     return true;
   }
+  // 並び順は 2 つだけ。ダイソーは値段の幅が小さいので、安い順・高い順は置かない
+  //   おすすめ：検索語によく合う順（在庫あり・新しめを少し上げる）。検索語がなければ、在庫ありを先に新しい順
+  //   新着：ネットストアに登録された日が新しい順
   function sortList(list) {
-    const by = {
-      new: (a, b) => b.item.created - a.item.created,
-      cheap: (a, b) => a.item.price - b.item.price || b.score - a.score,
-      high: (a, b) => b.item.price - a.item.price || b.score - a.score,
-    }[state.sort];
-    if (by) return list.slice().sort(by);
-    // 検索語がないときの「関連度順」は新しい順にする
-    return current.mode === "none" ? list.slice().sort((a, b) => b.item.created - a.item.created) : list;
+    if (state.sort === "new") return list.slice().sort((a, b) => b.item.created - a.item.created);
+    if (current.mode !== "none") return list;
+    const rank = (it) => (it.flags & 2 ? 2 : it.flags & 1 ? 0 : 1);
+    return list.slice().sort((a, b) => rank(a.item) - rank(b.item) || b.item.created - a.item.created);
   }
 
   function runSearch() {
@@ -116,26 +116,47 @@
     if (!kids.length && !level) html += `<p class="path">該当なし</p>`;
     $("#f-cat").innerHTML = html;
 
-    $("#f-min").value = state.min || "";
-    $("#f-max").value = state.max || "";
+    setSeg($("#f-price"), "price", state.price);
+    setSeg($("#sort"), "sort", state.sort);
     $("#f-stock").checked = state.stock;
     $("#f-new").checked = state.fresh;
     $("#f-hidediscon").checked = state.hideDiscon;
-    $("#sort").value = state.sort;
 
     // 付いている条件のチップ
     const chips = [];
     state.brands.forEach((b) => chips.push([`${BRAND[b]}`, () => state.brands.delete(b)]));
     if (state.cat.length) chips.push([state.cat.join(" › "), () => (state.cat = [])]);
-    if (state.min || state.max) chips.push([`${state.min ? state.min + "円" : ""}〜${state.max ? state.max + "円" : ""}`, () => (state.min = state.max = 0)]);
+    if (state.price) chips.push([state.price === "basic" ? "100円の商品" : "100円以外の商品", () => (state.price = "")]);
     if (state.stock) chips.push(["ネット在庫あり", () => (state.stock = false)]);
     if (state.fresh) chips.push(["30日以内に登録", () => (state.fresh = false)]);
     if (!state.hideDiscon) chips.push(["廃盤も表示", () => (state.hideDiscon = true)]);
     chipActions = chips.map((c) => c[1]);
-    $("#chips").innerHTML = chips.map((c, i) => `<button type="button" class="chip" data-chip="${i}">${esc(c[0])}<span aria-label="外す">×</span></button>`).join("");
+    // 新しく付いた条件のチップだけ、ふわっと出す
+    $("#chips").innerHTML = chips.map((c, i) => `<button type="button" class="chip${prevChips.has(c[0]) ? "" : " pop"}" data-chip="${i}">${esc(c[0])}<span aria-label="外す">×</span></button>`).join("");
+    prevChips = new Set(chips.map((c) => c[0]));
+    // カテゴリを掘り下げたら、一覧をふわっと入れ替える
+    const catKey = state.cat.join(">");
+    if (catKey !== prevCat) replay($("#f-cat"), "enter");
+    prevCat = catKey;
     $("#filterBadge").textContent = chips.length || "";
   }
-  let chipActions = [];
+  let chipActions = [], prevChips = new Set(), prevCat = "";
+  // スライド式の切り替え（並び順・価格）。白い玉を選んだ位置へ動かす
+  function setSeg(el, key, value) {
+    const btns = [...el.querySelectorAll("button")];
+    btns.forEach((b, i) => {
+      const on = b.dataset[key] === value;
+      b.setAttribute("aria-checked", on);
+      if (on) el.dataset.active = i;
+    });
+  }
+  // CSS アニメーションをもう一度最初から流す
+  function replay(el, cls) {
+    if (reduceMotion.matches) return;
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  }
 
   // ---------- 結果 ----------
   function highlight(title, terms) {
@@ -168,14 +189,14 @@
   // 100円（税込110円、食品は108円）の商品は値札を出さない
   const isBasic = (lo, hi) => lo === hi && lo <= 110;
   const priceTag = (text) => `<span class="pricetag">${esc(text).replace(/円$/, "<em>円</em>")}</span>`;
-  function card(it, terms) {
+  function card(it, terms, i = 99) {
     const flag = it.flags & 2 ? `<span class="flag">廃盤</span>`
       : !(it.flags & 1) ? `<span class="flag">在庫なし</span>`
       : todayDay - it.day <= 30 ? `<span class="flag new">NEW</span>` : "";
     const img = it.img ? (it.img.startsWith("http") ? it.img : imgBase + it.img) + "?width=360" : "";
     const price = isBasic(it.price, it.priceMax) ? ""
       : priceTag(it.price === it.priceMax ? `${yen(it.price)}円` : `${yen(it.price)}〜${yen(it.priceMax)}円`);
-    return `<a class="card b-${it.brand} ${it.flags & 1 ? "" : "out"}" href="${STORE}${encodeURIComponent(it.handle)}" target="_blank" rel="noopener">
+    return `<a class="card in b-${it.brand} ${it.flags & 1 ? "" : "out"}" style="--i:${Math.min(i, 14)}" href="${STORE}${encodeURIComponent(it.handle)}" target="_blank" rel="noopener">
       <div class="thumb">${img ? `<img src="${esc(img)}" alt="" loading="lazy" decoding="async">` : ""}${flag}${price}</div>
       <div class="title"><span class="sr">${BRAND[it.brand]}：</span>${highlight(it.title, terms)}</div>
     </a>`;
@@ -188,6 +209,7 @@
       : `全<b>${n.toLocaleString()}</b>件`;
 
     const notice = $("#notice");
+    const wasNotice = notice.hidden ? "" : notice.textContent;
     const words = current.terms.map((t) => t.word);
     if (current.mode === "some") {
       notice.hidden = false;
@@ -196,6 +218,7 @@
       notice.hidden = false;
       notice.textContent = `「${state.q}」と完全に一致する商品がなかったので、似た表記の商品を表示しています。`;
     } else notice.hidden = true;
+    if (!notice.hidden && notice.textContent !== wasNotice) replay(notice, "pop");
 
     const terms = current.mode === "fuzzy" ? [] : current.terms;
     if (!n) {
@@ -206,16 +229,24 @@
       $("#more").hidden = true;
       return;
     }
-    $("#grid").innerHTML = filtered.slice(0, state.shown).map((h) => card(h.item, terms)).join("");
+    $("#grid").innerHTML = filtered.slice(0, state.shown).map((h, i) => card(h.item, terms, i)).join("");
+    markReady($("#grid"));
     $("#more").hidden = n <= state.shown;
     $("#moreBtn").textContent = `もっと見る（残り${(n - state.shown).toLocaleString()}件）`;
+  }
+  // キャッシュから即座に読めた画像は load を待たずに表示する
+  function markReady(root) {
+    requestAnimationFrame(() => root.querySelectorAll(".thumb img:not(.ready)").forEach((img) => {
+      if (img.complete && img.naturalWidth) img.classList.add("ready");
+    }));
   }
   function showMore() {
     if (state.shown >= filtered.length) return;
     const terms = current.mode === "fuzzy" ? [] : current.terms;
-    const next = filtered.slice(state.shown, state.shown + PAGE).map((h) => card(h.item, terms)).join("");
+    const next = filtered.slice(state.shown, state.shown + PAGE).map((h, i) => card(h.item, terms, i)).join("");
     state.shown += PAGE;
     $("#grid").insertAdjacentHTML("beforeend", next);
+    markReady($("#grid"));
     $("#more").hidden = filtered.length <= state.shown;
     $("#moreBtn").textContent = `もっと見る（残り${(filtered.length - state.shown).toLocaleString()}件）`;
   }
@@ -247,7 +278,9 @@
       }));
     }
     suggIdx = -1;
-    box.hidden = !sugg.length || document.activeElement !== $("#q");
+    const show = sugg.length && document.activeElement === $("#q");
+    if (show && box.hidden) { box.hidden = false; replay(box, "pop"); }
+    else if (!show) closeSuggest();
     box.innerHTML = sugg.map((s, i) => `<li role="option" id="sg${i}" data-i="${i}" aria-selected="false"><span class="kind">${s.kind}</span><span>${esc(s.label)}</span>${s.n ? `<span class="n">${s.n.toLocaleString()}件</span>` : ""}</li>`).join("");
   }
   function moveSuggest(d) {
@@ -256,7 +289,15 @@
     document.querySelectorAll(".suggest li").forEach((li, i) => li.setAttribute("aria-selected", i === suggIdx));
     $("#q").setAttribute("aria-activedescendant", "sg" + suggIdx);
   }
-  function closeSuggest() { $("#suggest").hidden = true; suggIdx = -1; }
+  function closeSuggest() {
+    const box = $("#suggest");
+    suggIdx = -1;
+    if (box.hidden || box.dataset.closing) return;
+    if (reduceMotion.matches) { box.hidden = true; return; }
+    box.dataset.closing = "1";
+    done(box.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-4px)" }], { duration: 120, easing: EASE_IN }))
+      .then(() => { box.hidden = true; delete box.dataset.closing; });
+  }
 
   function setQuery(q) {
     $("#q").value = q;
@@ -289,24 +330,52 @@
         </div>`;
         }).join("")}</div></section>`;
     }).join("");
+    markReady($("#news"));
   }
 
-  function showView(v) {
+  // タブの切り替え：今の画面が横へ抜け、次の画面が反対側から入ってくる。スクロール位置は画面ごとに覚える
+  const scrollOf = { search: 0, news: 0 };
+  let viewBusy = false;
+  const viewOf = () => ($("#view-search").hidden ? "news" : "search");
+  function applyView(v) {
     $("#view-search").hidden = v !== "search";
     $("#view-news").hidden = v !== "news";
     $("#form").hidden = v !== "search";
     $("#hint").hidden = v !== "search";
-    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
-    $("#tabs").dataset.active = v;
     $("#searchToggle").hidden = v !== "search";
     history.replaceState(null, "", location.search + (v === "news" ? "#news" : ""));
+  }
+  async function showView(v, instant) {
+    document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
+    $("#tabs").dataset.active = v;
+    const from = viewOf();
+    if (from === v) return;
+    scrollOf[from] = scrollY;
+    if (instant || reduceMotion.matches || viewBusy) { applyView(v); scrollTo(0, scrollOf[v]); return; }
+    viewBusy = true;
+    const dir = v === "news" ? 1 : -1;
+    const head = [$("#form"), $("#hint"), $("#searchToggle")].filter((el) => !el.hidden && el.offsetParent);
+    const outs = [$("#view-" + from), ...(from === "search" ? head : [])].map((el) =>
+      el.animate([{ opacity: 1, transform: "none" }, { opacity: 0, transform: `translateX(${-28 * dir}px)` }],
+        { duration: 170, easing: EASE_IN, fill: "forwards" }));
+    await Promise.all(outs.map(done));
+    applyView(v);
+    outs.forEach((a) => a.cancel());
+    scrollTo(0, scrollOf[v]);
+    const ins = [$("#view-" + v), ...(v === "search" ? [$("#form"), $("#hint"), $("#searchToggle")].filter((el) => el.offsetParent) : [])];
+    await Promise.all(ins.map((el, i) => done(el.animate(
+      [{ opacity: 0, transform: `translateX(${28 * dir}px)` }, { opacity: 1, transform: "none" }],
+      { duration: 360, delay: i ? 40 : 0, easing: EASE_OUT, fill: "backwards" }))));
+    viewBusy = false;
   }
 
   // ---------- イベント ----------
   function bind() {
     let timer;
     $("#q").addEventListener("input", (e) => {
+      const wasHidden = $("#clear").hidden;
       $("#clear").hidden = !e.target.value;
+      if (wasHidden && e.target.value) replay($("#clear"), "pop");
       renderSuggest();
       clearTimeout(timer);
       timer = setTimeout(() => { state.q = e.target.value; runSearch(); }, 140);
@@ -350,17 +419,19 @@
       else state.cat = state.cat.slice(0, +b.dataset.depth);
       refresh();
     });
-    const priceOpts = (label) => `<option value="">${label}</option>` + PRICES.map((p) => `<option value="${p}">${p.toLocaleString()}円</option>`).join("");
-    $("#f-min").innerHTML = priceOpts("下限なし");
-    $("#f-max").innerHTML = priceOpts("上限なし");
-    $("#f-min").addEventListener("change", (e) => { state.min = +e.target.value || 0; refresh(); });
-    $("#f-max").addEventListener("change", (e) => { state.max = +e.target.value || 0; refresh(); });
+    $("#f-price").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (b && b.dataset.price !== state.price) { state.price = b.dataset.price; refresh(); }
+    });
     $("#f-stock").addEventListener("change", (e) => { state.stock = e.target.checked; refresh(); });
     $("#f-new").addEventListener("change", (e) => { state.fresh = e.target.checked; refresh(); });
     $("#f-hidediscon").addEventListener("change", (e) => { state.hideDiscon = e.target.checked; refresh(); });
-    $("#sort").addEventListener("change", (e) => { state.sort = e.target.value; refresh(); });
+    $("#sort").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (b && b.dataset.sort !== state.sort) { state.sort = b.dataset.sort; refresh(); }
+    });
     const resetAll = () => {
-      Object.assign(state, { brands: new Set(), cat: [], min: 0, max: 0, stock: false, fresh: false, hideDiscon: true });
+      Object.assign(state, { brands: new Set(), cat: [], price: "", stock: false, fresh: false, hideDiscon: true });
       refresh();
     };
     $("#reset").addEventListener("click", resetAll);
@@ -370,6 +441,8 @@
       if (c) { chipActions[+c.dataset.chip](); refresh(); }
     });
     $("#moreBtn").addEventListener("click", showMore);
+    // 商品画像は読み込めたらふわっと出す
+    document.addEventListener("load", (e) => { if (e.target.tagName === "IMG") e.target.classList.add("ready"); }, true);
     if ("IntersectionObserver" in window) {
       new IntersectionObserver((es) => { if (es[0].isIntersecting && !$("#view-search").hidden) showMore(); }, { rootMargin: "800px" }).observe($("#sentinel"));
     }
@@ -390,8 +463,6 @@
     };
     applyCollapsed(store.get("filtersCollapsed", false));
 
-    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
-    const EASE_OUT = "cubic-bezier(.22, .8, .24, 1)";
     let busy = false;
     // 並びが変わる前後の位置を測り、カードを前の位置から新しい位置へすべらせる（FLIP）
     function flip(change, extra = "") {
@@ -481,6 +552,7 @@
     $("#news").addEventListener("click", (e) => {
       const b = e.target.closest("[data-find]");
       if (!b) return;
+      scrollOf.search = 0;
       showView("search");
       // JAN が複数あるときは、どれかに当たるものを出す
       const q = b.dataset.find;
@@ -492,7 +564,6 @@
         refresh();
         $("#count").innerHTML += "　（話題の新商品から）";
       } else setQuery(q);
-      window.scrollTo({ top: 0 });
     });
   }
 
@@ -503,7 +574,7 @@
     $("#q").value = state.q;
     $("#clear").hidden = !state.q;
     bind();
-    if (location.hash === "#news") showView("news");
+    if (location.hash === "#news") showView("news", true);
 
     fetch("data/news.json").then((r) => r.json()).then((d) => renderNews(d.items)).catch(() => {
       $("#news").innerHTML = `<p class="empty">話題の新商品を読み込めませんでした。時間をおいて開き直してください。</p>`;

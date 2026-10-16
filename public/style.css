@@ -14,6 +14,7 @@
   --mark: #ffe066;
   --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
   --font-num: "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --ease-out: cubic-bezier(.22, .8, .24, 1);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
@@ -35,6 +36,12 @@ body {
 .wrap { max-width: 1240px; margin: 0 auto; }
 button, input, select { font: inherit; color: inherit; }
 button { cursor: pointer; }
+/* 色の変わるところは全部なめらかに */
+button, .chip, .cat, .check, .ex, .rail, .search-toggle, .side-close, .filter-open, #q {
+  transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, opacity .18s ease;
+}
+button:active { transform: scale(.97); }
+.card:active { transform: scale(.985); }
 :focus-visible { outline: 2px solid var(--daiso); outline-offset: 2px; }
 
 /* ---- ヘッダー ---- */
@@ -44,9 +51,10 @@ h1 { margin: 0; font-size: clamp(24px, 4vw, 32px); font-weight: 900; letter-spac
 h1 .d { color: var(--daiso); }
 /* タブ：白い玉が左右にすべって切り替わる */
 .tabs { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
-.tab-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px; background: var(--fg); transition: transform .28s cubic-bezier(.3, .7, .2, 1); }
+.tab-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; width: calc(50% - 3px); border-radius: 999px; background: var(--fg); transition: transform .3s var(--ease-out); }
 .tabs[data-active="news"] .tab-thumb { transform: translateX(100%); }
-.tabs button { position: relative; z-index: 1; border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 700; padding: 6px 16px; border-radius: 999px; white-space: nowrap; transition: color .28s; }
+.tabs button { position: relative; z-index: 1; border: 0; background: none; color: var(--muted); font-size: 13px; font-weight: 700; padding: 6px 16px; border-radius: 999px; white-space: nowrap; transition: color .3s ease; }
+.tabs button:active { transform: none; }
 .tabs button[aria-selected="true"] { color: var(--bg); }
 
 .searchbox { position: relative; }
@@ -117,22 +125,42 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--daiso); 
 .cat.lv3 { padding-left: 30px; font-size: 12.5px; }
 .cat.up { color: var(--muted); font-size: 12px; }
 .catmore { border: 0; background: none; color: var(--daiso); font-size: 12px; padding: 4px 6px; text-align: left; }
-.price-row { display: flex; align-items: center; gap: 6px; }
-.price-row select, #sort { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; flex: 1; }
+/* スライド式の切り替え（並び順・価格）。タブと同じ動き */
+.seg { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.seg-thumb { position: absolute; top: 3px; bottom: 3px; left: 3px; border-radius: 999px; background: var(--fg); transition: transform .3s var(--ease-out); }
+.seg-2 .seg-thumb { width: calc((100% - 6px) / 2); }
+.seg-3 .seg-thumb { width: calc((100% - 6px) / 3); }
+.seg[data-active="1"] .seg-thumb { transform: translateX(100%); }
+.seg[data-active="2"] .seg-thumb { transform: translateX(200%); }
+.seg button { position: relative; z-index: 1; border: 0; background: none; color: var(--muted); font-size: 12.5px; font-weight: 700; padding: 5px 12px; border-radius: 999px; white-space: nowrap; transition: color .3s ease; }
+.seg button[aria-checked="true"] { color: var(--bg); }
+.seg button:active { transform: none; }
+#f-price button { padding-inline: 6px; }
 .reset { justify-self: start; border: 0; background: none; color: var(--muted); text-decoration: underline; font-size: 12px; padding: 0; }
 
 .resbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; justify-content: space-between; }
 .count { font-size: 14px; color: var(--muted); }
 .count b { font-family: var(--font-num); font-size: 22px; font-weight: 500; color: var(--fg); margin-right: 2px; font-variant-numeric: tabular-nums; }
 .resbar-right { display: flex; gap: 8px; align-items: center; }
-#sort { flex: none; }
 .filter-open { display: none; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 700; }
 .filter-open svg { width: 16px; height: 16px; }
 .filter-open #filterBadge:not(:empty) { margin-left: 6px; background: var(--daiso); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 10px; }
 .chips:empty { display: none; }
 .chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 6px 3px 12px; font-size: 12.5px; }
+.chip.pop { animation: pop .26s var(--ease-out) both; }
 .chip span { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; background: var(--bg); font-size: 12px; }
+.notice.pop { animation: fadeDown .3s var(--ease-out) both; }
+.suggest.pop { animation: fadeDown .18s var(--ease-out) both; }
+.clear.pop { animation: pop .22s var(--ease-out) both; }
+.cattree.enter > * { animation: fadeRight .28s var(--ease-out) both; }
+.cattree.enter > :nth-child(n+2) { animation-delay: 20ms; }
+.cattree.enter > :nth-child(n+4) { animation-delay: 40ms; }
+.cattree.enter > :nth-child(n+7) { animation-delay: 60ms; }
+.empty { animation: fadeDown .3s var(--ease-out) both; }
+@keyframes pop { from { opacity: 0; transform: scale(.85); } }
+@keyframes fadeDown { from { opacity: 0; transform: translateY(-6px); } }
+@keyframes fadeRight { from { opacity: 0; transform: translateX(-8px); } }
 .notice { margin-top: 12px; padding: 10px 14px; border-radius: 8px; background: var(--daiso-tint); font-size: 13px; }
 
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 16px 12px; padding-top: 16px; }
@@ -148,11 +176,16 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--daiso); 
 .b-tp { --brand: var(--tp); }
 .card::before, .tri { background: var(--brand); }
 .card:hover { transform: translateY(-2px); border-color: var(--muted); }
+/* 一覧が入れ替わったとき：上のカードから順に、少し下からふわっと出る */
+.card.in { animation: cardIn .38s var(--ease-out) backwards; animation-delay: calc(var(--i, 0) * 18ms); }
+@keyframes cardIn { from { opacity: 0; transform: translateY(10px); } }
+.thumb img { opacity: 0; transition: opacity .35s ease; }
+.thumb img.ready { opacity: 1; }
 .thumb { position: relative; display: block; aspect-ratio: 1 / 1; max-width: 100%; background: #fff; }
 .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
 .flag { position: absolute; right: 6px; top: 6px; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 3px; background: var(--fg); color: var(--bg); }
 .flag.new { font-family: var(--font-num); letter-spacing: .08em; background: var(--daiso); color: #fff; }
-.card.out .thumb img { opacity: .5; }
+.card.out .thumb img.ready { opacity: .5; }
 .pricetag {
   position: absolute; right: 6px; bottom: 6px; padding: 1px 8px 2px; border-radius: 4px;
   background: var(--tag); color: var(--tag-fg); box-shadow: 0 1px 2px rgb(0 0 0 / .18);
@@ -209,6 +242,7 @@ footer a { color: inherit; }
   .hint { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important; }
   .card, .filters, .filters.open, .scrim, .tab-thumb, .tabs button { transition: none; }
   .card:hover { transform: none; }
   .skeleton { animation: none; }
