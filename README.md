@@ -1,7 +1,25 @@
 # ダイソーさがし帳
 
 ダイソーネットストアの全商品（DAISO / Standard Products / THREEPPY）を一つの画面で探せるサイト。
-ダイソー公式企業サイトの「話題の新商品」も見られる。
+ダイソー公式企業サイトの「話題の新商品」も見られる。個人で作った非公式のサイトです。
+
+**公開中のサイト → https://daiso-sagashi.vercel.app**
+
+<p>
+  <img src="docs/screenshots/top.png" width="260" alt="トップ画面（全商品の一覧）">
+  <img src="docs/screenshots/search.png" width="260" alt="「収納 ボックス」の検索結果">
+</p>
+
+## 使った技術
+
+| 部分 | 技術 |
+| --- | --- |
+| データ集め | Python（標準ライブラリのみ） |
+| 毎朝の自動更新 | GitHub Actions |
+| 画面・検索 | HTML / CSS / JavaScript（ライブラリなし） |
+| 公開 | Vercel |
+
+約5.5万件の商品をブラウザの中だけで検索するので、サーバーを持たずに動きます。
 
 ## しくみ
 
