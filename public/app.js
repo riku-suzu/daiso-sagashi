@@ -4,6 +4,9 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const STORE = "https://jp.daisonet.com/products/";
   const BRAND = { daiso: "DAISO", sp: "Standard Products", tp: "THREEPPY" };
+  // 色の名前。並びは虹の順（並び替え「色」もこの順）
+  const COLOR = { red: "赤", orange: "オレンジ", yellow: "黄", green: "緑", blue: "青", purple: "紫", pink: "ピンク",
+    brown: "茶", beige: "ベージュ", white: "白", gray: "グレー", black: "黒", clear: "透明" };
   // 動き：減らす設定の人には付けない。止まり方はどこも同じカーブにそろえる
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const EASE_OUT = "cubic-bezier(.22, .8, .24, 1)";
@@ -14,7 +17,7 @@
 
   let items = [], cats = [], imgBase = "", todayDay = 0;
   let current = { hits: [], mode: "none" }, filtered = [];
-  const state = { q: "", brands: new Set(), cat: [], price: "", stock: false, fresh: false, hideDiscon: true, sort: "rel", shown: PAGE };
+  const state = { q: "", brands: new Set(), colors: new Set(), cat: [], price: "", stock: false, fresh: false, hideDiscon: true, sort: "rel", shown: PAGE };
 
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -27,17 +30,19 @@
     const p = new URLSearchParams(location.search);
     state.q = p.get("q") || "";
     state.brands = new Set((p.get("brand") || "").split(",").filter((b) => BRAND[b]));
+    state.colors = new Set((p.get("color") || "").split(",").filter((c) => COLOR[c]));
     state.cat = (p.get("cat") || "").split(">").filter(Boolean);
     state.price = ["basic", "other"].includes(p.get("price")) ? p.get("price") : "";
     state.stock = p.get("stock") === "1";
     state.fresh = p.get("new") === "1";
     state.hideDiscon = p.get("discon") !== "1";
-    state.sort = p.get("sort") === "new" ? "new" : "rel";
+    state.sort = ["new", "color"].includes(p.get("sort")) ? p.get("sort") : "rel";
   }
   function writeURL() {
     const p = new URLSearchParams();
     if (state.q) p.set("q", state.q);
     if (state.brands.size) p.set("brand", [...state.brands].join(","));
+    if (state.colors.size) p.set("color", [...state.colors].join(","));
     if (state.cat.length) p.set("cat", state.cat.join(">"));
     if (state.price) p.set("price", state.price);
     if (state.stock) p.set("stock", "1");
@@ -52,6 +57,7 @@
   const catName = (i) => cats[i];
   function passes(it, skip) {
     if (skip !== "brand" && state.brands.size && !state.brands.has(it.brand)) return false;
+    if (skip !== "color" && state.colors.size && !state.colors.has(it.color)) return false;
     if (skip !== "cat") for (let i = 0; i < state.cat.length; i++) if (catName(it.cats[i]) !== state.cat[i]) return false;
     if (state.price && isBasic(it.price, it.priceMax) !== (state.price === "basic")) return false;
     if (state.stock && !(it.flags & 1)) return false;
@@ -64,6 +70,11 @@
   //   新着：ネットストアに登録された日が新しい順
   function sortList(list) {
     if (state.sort === "new") return list.slice().sort((a, b) => b.item.created - a.item.created);
+    // 色は虹の順。色のない商品は最後。同じ色の中は今の並び（検索の順）のまま
+    if (state.sort === "color") {
+      const ci = (c) => (COLOR[c] ? Object.keys(COLOR).indexOf(c) : 99);
+      return list.slice().sort((a, b) => ci(a.item.color) - ci(b.item.color));
+    }
     if (current.mode !== "none") return list;
     const rank = (it) => (it.flags & 2 ? 2 : it.flags & 1 ? 0 : 1);
     return list.slice().sort((a, b) => rank(a.item) - rank(b.item) || b.item.created - a.item.created);
@@ -88,6 +99,19 @@
     for (const h of current.hits) if (passes(h.item, "brand")) bc[h.item.brand]++;
     $("#f-brand").innerHTML = Object.keys(BRAND).map((b) =>
       `<label class="check"><input type="checkbox" value="${b}" ${state.brands.has(b) ? "checked" : ""}><span class="tri b-${b}" aria-hidden="true"></span>${BRAND[b]}<span class="n">${bc[b].toLocaleString()}</span></label>`).join("");
+
+    // 色（色以外の条件で数える）。0 件の色は隠す。選んでいる色は残す
+    const kc = {};
+    for (const h of current.hits) if (passes(h.item, "color") && h.item.color) kc[h.item.color] = (kc[h.item.color] || 0) + 1;
+    const sw = $("#f-color");
+    if (!sw.children.length) sw.innerHTML = Object.keys(COLOR).map((c) => `<button type="button" class="swatch" data-color="${c}" aria-pressed="false"></button>`).join("");
+    for (const b of sw.children) {
+      const c = b.dataset.color, n = kc[c] || 0, on = state.colors.has(c);
+      b.hidden = !n && !on;
+      b.setAttribute("aria-pressed", on);
+      b.setAttribute("aria-label", `${COLOR[c]} ${n.toLocaleString()}件`);
+      b.title = `${COLOR[c]} ${n.toLocaleString()}件`;
+    }
 
     // カテゴリ（いまの階層の 1 つ下を数える）
     const level = state.cat.length;
@@ -125,6 +149,7 @@
     // 付いている条件のチップ
     const chips = [];
     state.brands.forEach((b) => chips.push([`${BRAND[b]}`, () => state.brands.delete(b)]));
+    if (state.colors.size) chips.push([`色：${[...state.colors].map((c) => COLOR[c]).join("・")}`, () => (state.colors = new Set())]);
     if (state.cat.length) chips.push([state.cat.join(" › "), () => (state.cat = [])]);
     if (state.price) chips.push([state.price === "basic" ? "100円の商品" : "100円以外の商品", () => (state.price = "")]);
     if (state.stock) chips.push(["ネット在庫あり", () => (state.stock = false)]);
@@ -405,6 +430,13 @@
     $("#clear").addEventListener("click", () => { setQuery(""); $("#q").focus(); });
     document.querySelectorAll(".ex").forEach((b) => b.addEventListener("click", () => { setQuery(b.textContent); remember(b.textContent); }));
 
+    $("#f-color").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-color]");
+      if (!b) return;
+      const c = b.dataset.color;
+      state.colors.has(c) ? state.colors.delete(c) : state.colors.add(c);
+      refresh();
+    });
     $("#f-brand").addEventListener("change", (e) => {
       const b = e.target.value;
       e.target.checked ? state.brands.add(b) : state.brands.delete(b);
@@ -431,7 +463,7 @@
       if (b && b.dataset.sort !== state.sort) { state.sort = b.dataset.sort; refresh(); }
     });
     const resetAll = () => {
-      Object.assign(state, { brands: new Set(), cat: [], price: "", stock: false, fresh: false, hideDiscon: true });
+      Object.assign(state, { brands: new Set(), colors: new Set(), cat: [], price: "", stock: false, fresh: false, hideDiscon: true });
       refresh();
     };
     $("#reset").addEventListener("click", resetAll);
@@ -586,7 +618,7 @@
       imgBase = data.img;
       items = data.items.map((r) => ({
         handle: r[0], title: r[1], brand: r[2], cats: r[3], words: r[4],
-        price: r[5], priceMax: r[6], flags: r[7], created: r[8], day: dayOf(r[8]), img: r[9],
+        price: r[5], priceMax: r[6], flags: r[7], created: r[8], day: dayOf(r[8]), img: r[9], color: r[10] || "",
       }));
       const now = new Date();
       todayDay = Math.floor((now.getTime() + 9 * 3600e3) / 864e5);

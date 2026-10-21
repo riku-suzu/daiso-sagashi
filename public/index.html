@@ -55,6 +55,10 @@
         <div class="checks" id="f-brand"></div>
       </div>
       <div class="fgroup">
+        <h2>色</h2>
+        <div class="swatches" id="f-color"></div>
+      </div>
+      <div class="fgroup">
         <h2>カテゴリ</h2>
         <div id="f-cat" class="cattree"></div>
       </div>
@@ -81,10 +85,11 @@
         <div class="count" id="count" aria-live="polite">読み込み中…</div>
         <div class="resbar-right">
           <button type="button" class="filter-open" id="filterOpen" aria-controls="filters"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg><span class="fo-label">絞り込み</span><span id="filterBadge"></span></button>
-          <div class="seg seg-2" id="sort" role="radiogroup" aria-label="並び順" data-active="0">
+          <div class="seg seg-3" id="sort" role="radiogroup" aria-label="並び順" data-active="0">
             <span class="seg-thumb" aria-hidden="true"></span>
             <button type="button" role="radio" data-sort="rel" aria-checked="true" title="検索語によく合う順。ネット在庫のある商品を先に出します">おすすめ</button>
             <button type="button" role="radio" data-sort="new" aria-checked="false" title="ネットストアに登録された日が新しい順">新着</button>
+            <button type="button" role="radio" data-sort="color" aria-checked="false" title="色ごとに虹の順で並べます">色</button>
           </div>
         </div>
       </div>

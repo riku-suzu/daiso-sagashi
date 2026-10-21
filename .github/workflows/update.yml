@@ -23,6 +23,11 @@ jobs:
           python-version: "3.12"
       - name: 商品データを取り直す
         run: python3 scripts/build.py
+      - name: 色を決める（失敗してもデータは出す）
+        continue-on-error: true
+        run: |
+          python3 -m pip install pillow
+          python3 scripts/colors.py --minutes 40
       - name: 変わっていればコミット（Vercel が自動で公開し直す）
         run: |
           git config user.name "github-actions[bot]"

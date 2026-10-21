@@ -8,6 +8,9 @@
   --daiso: #d4006f;
   --daiso-tint: #fbe7f1;
   --sp: #9a9e9b;
+  --c-red: #d9473f; --c-orange: #f08c2e; --c-yellow: #f2cb3a; --c-green: #3f9a4f; --c-blue: #3f7fd6;
+  --c-purple: #8e5bcf; --c-pink: #ef8fb8; --c-brown: #8a5a36; --c-beige: #e6d3b0; --c-white: #ffffff;
+  --c-gray: #9ca3a0; --c-black: #1c1f1d;
   --tp: #d2bb93;
   --tag: #fff5c2;
   --tag-fg: #1c1f1d;
@@ -22,6 +25,9 @@
     --bg: #151716; --surface: #1e2120; --fg: #ecefeb; --muted: #9aa19b; --line: #313633;
     --daiso: #ff5aa8; --daiso-tint: #3a1a2a; --sp: #a7aba8; --tp: #d6c19b;
     --tag: #3b3517; --tag-fg: #fff3b8; --mark: #6b5a12; color-scheme: dark;
+    --c-red: #ef5d54; --c-orange: #f79a3e; --c-yellow: #f5d457; --c-green: #58b466; --c-blue: #5a95e6;
+    --c-purple: #a57be0; --c-pink: #f4a6c6; --c-brown: #a06a44; --c-beige: #d9c29a; --c-white: #f5f5f2;
+    --c-gray: #8d9491; --c-black: #0b0c0b;
   }
 }
 
@@ -113,6 +119,24 @@ h1 .d { color: var(--daiso); }
 .side-close svg { width: 16px; height: 16px; }
 .tri { width: 12px; height: 12px; clip-path: polygon(0 0, 100% 0, 0 100%); flex: none; }
 .checks { display: grid; gap: 2px; }
+/* 色の丸。選んだ色は外側に輪を付ける */
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 22px; height: 22px; padding: 0; border-radius: 50%; border: 1px solid var(--line); cursor: pointer; transition: box-shadow .25s var(--ease-out), transform .25s var(--ease-out); }
+.swatch:hover { transform: scale(1.12); }
+.swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
+.swatch[data-color="red"] { background: var(--c-red); }
+.swatch[data-color="orange"] { background: var(--c-orange); }
+.swatch[data-color="yellow"] { background: var(--c-yellow); }
+.swatch[data-color="green"] { background: var(--c-green); }
+.swatch[data-color="blue"] { background: var(--c-blue); }
+.swatch[data-color="purple"] { background: var(--c-purple); }
+.swatch[data-color="pink"] { background: var(--c-pink); }
+.swatch[data-color="brown"] { background: var(--c-brown); }
+.swatch[data-color="beige"] { background: var(--c-beige); }
+.swatch[data-color="white"] { background: var(--c-white); border-color: var(--muted); }
+.swatch[data-color="gray"] { background: var(--c-gray); }
+.swatch[data-color="black"] { background: var(--c-black); border-color: var(--muted); }
+.swatch[data-color="clear"] { background: repeating-linear-gradient(45deg, var(--surface) 0 4px, var(--line) 4px 6px); border-color: var(--muted); }
 .check, .toggle { display: flex; align-items: center; gap: 8px; font-size: 14px; padding: 3px 0; cursor: pointer; }
 .check .n, .cat .n { margin-left: auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--daiso); margin: 0; }
