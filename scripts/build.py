@@ -322,6 +322,9 @@ def news():
             })
         time.sleep(WAIT)
     out.sort(key=lambda x: x["date"], reverse=True)
+    if not out:
+        # サイトが止まっていると、お知らせのページが返ってきて 0 件になる（2026-10-22 に実際に起きた）
+        raise RuntimeError("1 件も取れませんでした（サイトが止まっている可能性）")
     print(f"  話題の新商品: {len(out)}件", flush=True)
     return out
 
@@ -333,8 +336,9 @@ if __name__ == "__main__":
     try:
         (OUT / "news.json").write_text(
             json.dumps({"updated": now, "items": news()}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    except (RuntimeError, Stop) as e:
-        print(f"  話題の新商品は前回のままにします：{e}", flush=True)
+    except Exception as e:
+        # 公式企業サイトがおかしくても、全商品の更新は止めない
+        print(f"  話題の新商品は前回のままにします：{type(e).__name__}: {e}", flush=True)
     _fails = 0
     if "--news" not in sys.argv:
         print("全商品を取得中…", flush=True)
