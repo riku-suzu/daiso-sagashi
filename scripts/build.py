@@ -129,9 +129,18 @@ def record(p):
         img = "https:" + img
     img = img.replace(IMG_PREFIX, "")
 
-    created = (p.get("created_at") or p.get("published_at") or "")[:10].replace("-", "")
     return [p["handle"], p["title"].strip(), brand, cats, " ".join(words), prices[0], prices[-1],
-            flags, int(created or 0), img]
+            flags, created_at(p.get("created_at") or p.get("published_at")), img]
+
+
+def created_at(s):
+    """登録日時を日本時間の YYYYMMDDhhmmss の数字にする。同じ日の中も公式と同じく秒まで見て並べるため"""
+    if not s:
+        return 0
+    try:
+        return int(datetime.datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(JST).strftime("%Y%m%d%H%M%S"))
+    except ValueError:
+        return int(s[:10].replace("-", "") or 0) * 1000000
 
 
 def crawl_feed(base, quiet=False, found=None):
@@ -215,6 +224,8 @@ def catalog():
         for r in old["items"]:
             r = list(r)
             r[3] = [cats[i] for i in r[3]]
+            if 0 < r[8] < 10**8:   # 日付だけだった頃のデータ。取り直すまではその日の 0 時として扱う
+                r[8] *= 1000000
             prev[r[0]] = r
     state = json.loads(STATE.read_text()) if STATE.exists() else {}
     fetched = state.get("fetched", {})   # 上限の外にある商品を、最後に取り直した日

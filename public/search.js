@@ -171,7 +171,7 @@
       }
       return best;
     };
-    const bonus = (it) => (it.flags & 1 ? 3 : 0) - (it.flags & 2 ? 6 : 0) + (today - it.created < 30 ? 2 : 0) - it._t.length / 40;
+    const bonus = (it) => (it.flags & 1 ? 3 : 0) - (it.flags & 2 ? 6 : 0) + (today - it.day <= 30 ? 2 : 0) - it._t.length / 40;
 
     let hits = [];
     for (const it of items) {

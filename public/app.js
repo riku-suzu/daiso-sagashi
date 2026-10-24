@@ -67,7 +67,7 @@
   }
   // 並び順は 2 つだけ。ダイソーは値段の幅が小さいので、安い順・高い順は置かない
   //   おすすめ：検索語によく合う順（在庫あり・新しめを少し上げる）。検索語がなければ、在庫ありを先に新しい順
-  //   新着：ネットストアに登録された日が新しい順
+  //   新着：ネットストアに登録された日時が新しい順（公式の新着順と同じく秒まで見る）
   function sortList(list) {
     if (state.sort === "new") return list.slice().sort((a, b) => b.item.created - a.item.created);
     // 色は虹の順。色のない商品は最後。同じ色の中は今の並び（検索の順）のまま
@@ -618,7 +618,7 @@
       imgBase = data.img;
       items = data.items.map((r) => ({
         handle: r[0], title: r[1], brand: r[2], cats: r[3], words: r[4],
-        price: r[5], priceMax: r[6], flags: r[7], created: r[8], day: dayOf(r[8]), img: r[9], color: r[10] || "",
+        price: r[5], priceMax: r[6], flags: r[7], created: r[8], day: dayOf(r[8] > 1e8 ? Math.floor(r[8] / 1e6) : r[8]), img: r[9], color: r[10] || "",
       }));
       const now = new Date();
       todayDay = Math.floor((now.getTime() + 9 * 3600e3) / 864e5);
