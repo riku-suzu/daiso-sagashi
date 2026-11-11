@@ -12,6 +12,7 @@ public/data/ に書き出す。GitHub Actions で毎朝動かす（標準ライ�
      個別取得の枠が余れば、取り直しが古い順に更新する
 """
 import datetime
+import difflib
 import html
 import json
 import re
@@ -340,6 +341,87 @@ def news():
     return out
 
 
+# ---------- Standard Products のお知らせ ----------
+# SP の新作を一覧で出している公式の場所はネットストアしかない。補いとして、
+# SP 公式サイトのお知らせと、PR TIMES の大創産業リリースのうち SP に関わるものを並べる
+
+SP_FEEDS = [
+    ("sp", "https://standardproducts.jp/blogs/news.atom"),
+    ("prtimes", "https://prtimes.jp/companyrdf.php?company_id=39955"),
+]
+SP_WORDS = re.compile(r"Standard\s*Products|スタンダードプロダクツ", re.I)
+SP_NEW = re.compile(r"発売|新作|新商品|登場|記念商品|コラボレーション")   # 「新商品」の印をつける見出し
+SP_NOT_NEW = re.compile(r"受賞|プレゼント|募集|お詫び|出店")
+SP_KEEP = 40
+
+
+def _local(tag):
+    return tag.rsplit("}", 1)[-1]
+
+
+def _child(el, name):
+    return next((c for c in el if _local(c.tag) == name), None)
+
+
+def _norm(t):
+    # 重複を見分けるため、括弧の見出し（【リリース】など）と記号・空白を落とす
+    t = re.sub(r"^[【［\[][^】］\]]*[】］\]]", "", t)
+    return re.sub(r"[\s　、。・！!？?「」『』“”\"'（）()～〜~]", "", t)
+
+
+def sp_news():
+    import xml.etree.ElementTree as ET
+    out = []
+    for source, url in SP_FEEDS:
+        try:
+            root = ET.fromstring(get(url, tries=2))
+        except Exception as e:
+            print(f"  SPのお知らせ（{source}）を飛ばしました：{type(e).__name__}: {e}", flush=True)
+            continue
+        time.sleep(WAIT)
+        entries = [el for el in root.iter() if _local(el.tag) in ("entry", "item")]
+        for el in entries:
+            title = html.unescape((_child(el, "title").text or "").strip())
+            if source == "sp":
+                link = _child(el, "link").get("href")
+                date = (_child(el, "published").text or "")[:10]
+                desc = " ".join(text_of((_child(el, "content").text or "")))
+            else:
+                link = (_child(el, "link").text or "").strip()
+                date = (_child(el, "date").text or "")[:10]
+                desc = re.sub(r"^\[[^\]]*\]\s*", "", (_child(el, "description").text or "").strip())
+                if not SP_WORDS.search(title + desc):
+                    continue
+            # リリース冒頭の決まり文句（会社の所在地・代表者、「以下〇〇」の断り書き）を落とす
+            desc = re.sub(r"株式会社大創産業（[^）]*）(は、?|が展開する)?", "", desc)
+            desc = re.sub(r"（[^（）]*以下[^（）]*）", "", desc)
+            desc = re.sub(r"\s+", " ", desc).strip()
+            out.append({"date": date, "title": title, "desc": desc[:120], "url": link, "source": source,
+                        "new": bool(SP_NEW.search(title)) and not SP_NOT_NEW.search(title)})
+    # 同じリリースが両方に載ることが多い。PR TIMES の方が写真つきで詳しいので、そちらを残す
+    out.sort(key=lambda x: (x["date"], x["source"] == "prtimes"), reverse=True)
+    kept = [x for i, x in enumerate(out) if not any(_same(x, k) for k in out[:i])]
+    if not kept:
+        raise RuntimeError("1 件も取れませんでした")
+    print(f"  SPのお知らせ: {len(kept[:SP_KEEP])}件", flush=True)
+    return kept[:SP_KEEP]
+
+
+def _same(a, b):
+    """日付が 3 日以内で、見出しに 8 文字以上続けて同じ部分があれば、同じ話題とみなす"""
+    if a["source"] == b["source"] or abs(_days(a["date"]) - _days(b["date"])) > 3:
+        return False
+    x, y = _norm(a["title"]), _norm(b["title"])
+    return difflib.SequenceMatcher(None, x, y, autojunk=False).find_longest_match(0, len(x), 0, len(y)).size >= 8
+
+
+def _days(d):
+    try:
+        return datetime.date.fromisoformat(d).toordinal()
+    except ValueError:
+        return 0
+
+
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
     now = datetime.datetime.now(JST).strftime("%Y-%m-%d %H:%M")
@@ -350,6 +432,13 @@ if __name__ == "__main__":
     except Exception as e:
         # 公式企業サイトがおかしくても、全商品の更新は止めない
         print(f"  話題の新商品は前回のままにします：{type(e).__name__}: {e}", flush=True)
+    _fails = 0
+    print("Standard Products のお知らせを取得中…", flush=True)
+    try:
+        (OUT / "sp_news.json").write_text(
+            json.dumps({"updated": now, "items": sp_news()}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    except Exception as e:
+        print(f"  SPのお知らせは前回のままにします：{type(e).__name__}: {e}", flush=True)
     _fails = 0
     if "--news" not in sys.argv:
         print("全商品を取得中…", flush=True)

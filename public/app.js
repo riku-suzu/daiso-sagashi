@@ -358,6 +358,32 @@
     markReady($("#news"));
   }
 
+  // ---------- Standard Products のお知らせ（話題の新商品タブの上） ----------
+  const SP_FIRST = 5;   // 最初に見せる件数。残りは「もっと見る」で開く
+  function renderSpNews(list) {
+    if (!list || !list.length) return;
+    const src = { sp: "SP公式", prtimes: "PR TIMES" };
+    $("#spnewsList").innerHTML = list.map((n, i) => {
+      const d = n.date.split("-");
+      return `<li${i >= SP_FIRST ? " hidden" : ""}><a href="${esc(n.url)}" target="_blank" rel="noopener">
+        <time datetime="${esc(n.date)}">${d[0]}<b>${d[1]}.${d[2]}</b></time>
+        <span class="sp-body"><span class="sp-title">${n.new ? `<span class="sp-new">新商品</span>` : ""}${esc(n.title)}</span>
+        ${n.desc ? `<span class="sp-desc">${esc(n.desc)}</span>` : ""}</span>
+        <span class="sp-src">${src[n.source] || ""}</span></a></li>`;
+    }).join("");
+    const more = $("#spnewsMore");
+    const rest = list.length - SP_FIRST;
+    if (rest > 0) {
+      more.hidden = false;
+      more.textContent = `もっと見る（残り${rest}件）`;
+      more.onclick = () => {
+        $("#spnewsList").querySelectorAll("li[hidden]").forEach((li) => (li.hidden = false));
+        more.hidden = true;
+      };
+    }
+    $("#spnews").hidden = false;
+  }
+
   // タブの切り替え：今の画面が横へ抜け、次の画面が反対側から入ってくる。スクロール位置は画面ごとに覚える
   const scrollOf = { search: 0, news: 0 };
   let viewBusy = false;
@@ -611,6 +637,8 @@
     fetch("data/news.json").then((r) => r.json()).then((d) => renderNews(d.items)).catch(() => {
       $("#news").innerHTML = `<p class="empty">話題の新商品を読み込めませんでした。時間をおいて開き直してください。</p>`;
     });
+    // 読めなければ欄ごと出さない
+    fetch("data/sp_news.json").then((r) => r.json()).then((d) => renderSpNews(d.items)).catch(() => {});
 
     try {
       const data = await (await fetch("data/catalog.json")).json();

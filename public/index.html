@@ -102,13 +102,21 @@
   </section>
 
   <section id="view-news" hidden>
+    <section class="spnews b-sp" id="spnews" aria-labelledby="spnews-h" hidden>
+      <div class="spnews-head">
+        <h2 id="spnews-h">Standard Products のお知らせ</h2>
+        <span class="spnews-note">SPの新作はネットストアに載るのが遅いため、公式サイトとPR TIMESのお知らせを並べています</span>
+      </div>
+      <ol class="spnews-list" id="spnewsList"></ol>
+      <button type="button" class="spnews-more" id="spnewsMore" hidden></button>
+    </section>
     <p class="lede">ダイソー公式企業サイトの「話題の新商品」に載った商品です。カードを押すと公式ページが開きます。</p>
     <div id="news"></div>
   </section>
 
   <footer>
     <div id="updated"></div>
-    <div>出典：<a href="https://jp.daisonet.com/collections/all" target="_blank" rel="noopener">ダイソーネットストア</a> ／ <a href="https://www.daiso-sangyo.co.jp/item" target="_blank" rel="noopener">DAISO公式企業サイト「話題の新商品」</a>。毎朝自動で取り直しています。</div>
+    <div>出典：<a href="https://jp.daisonet.com/collections/all" target="_blank" rel="noopener">ダイソーネットストア</a> ／ <a href="https://www.daiso-sangyo.co.jp/item" target="_blank" rel="noopener">DAISO公式企業サイト「話題の新商品」</a> ／ <a href="https://standardproducts.jp/blogs/news" target="_blank" rel="noopener">Standard Products 公式サイト</a> ／ <a href="https://prtimes.jp/main/html/searchrlp/company_id/39955" target="_blank" rel="noopener">PR TIMES（大創産業）</a>。毎朝自動で取り直しています。</div>
     <div>左上の三角形の色はブランドです（ピンク：DAISO、グレー：Standard Products、ベージュ：THREEPPY）。価格は税込で、100円（税込110円）の商品は値段を省いています。在庫はネットストアのもので、店舗の在庫とは違います。店舗の品揃えは店ごとに異なります。</div>
   </footer>
 </main>
