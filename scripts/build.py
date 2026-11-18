@@ -269,15 +269,16 @@ def catalog():
     for h in set(fresh) - main:
         fetched[h] = today
 
-    # 並べる日時は、前から載っている商品は前回のままにする（公式が一斉に公開し直しても並びが崩れないように）。
-    # 登録日時だけで並べていた頃の商品（recheck）は、次に取れたときに一度だけ付け直す
-    if state.get("date_basis") != "added":
-        state["date_basis"], state["recheck"] = "added", sorted(prev)
-    recheck = set(state.get("recheck", []))
+    # 並べる日時は、前から載っている商品は前回のままにする。
+    # 公式は載っている商品の公開日時をまとめて更新することがあり（例：11/13 に夏物 1,100 件）、それを新着と見ないため。
+    # 例外の recheck は、登録日時だけで並べていた頃に載り始めた商品と、その日（YYYYMMDD）。
+    # 公開日時が載り始めた日以前なら、それが本当の追加日なので一度だけ付け直す
+    recheck = state.get("recheck") or {}
     for h, r in fresh.items():
-        if h in prev and h not in recheck:
-            r[8] = prev[h][8]
-    recheck -= set(fresh)
+        if h in prev:
+            seen = recheck.pop(h, 0)
+            if not r[8] <= seen * 1000000 + 235959:
+                r[8] = prev[h][8]
 
     # 取れなかった商品は前回のデータで埋める
     known = listed if len(listed) > 1000 else prev   # サイトマップを取れなかったときは前回の商品を全部残す
@@ -294,7 +295,8 @@ def catalog():
         print(f"  まだ一度も取れていない商品: {sum(1 for h in listed if h not in fresh)}件", flush=True)
 
     state["fetched"] = {h: d for h, d in fetched.items() if h in fresh and h not in main}
-    state["recheck"] = sorted(recheck)
+    state["recheck"] = {h: d for h, d in recheck.items() if h in fresh}
+    state.pop("date_basis", None)
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     return list(fresh.values())
