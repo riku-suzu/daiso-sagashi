@@ -131,11 +131,17 @@ def record(p):
     img = img.replace(IMG_PREFIX, "")
 
     return [p["handle"], p["title"].strip(), brand, cats, " ".join(words), prices[0], prices[-1],
-            flags, created_at(p.get("created_at") or p.get("published_at")), img]
+            flags, added_at(p), img]
 
 
-def created_at(s):
-    """登録日時を日本時間の YYYYMMDDhhmmss の数字にする。同じ日の中も公式と同じく秒まで見て並べるため"""
+def added_at(p):
+    """サイトに並べる日時。登録日時と公開日時の遅いほう。
+    前から登録してあって後で公開した商品や、いったん下げて再掲載した商品は、登録日時だけだと古い位置に埋もれるため"""
+    return max(stamp(p.get("created_at")), stamp(p.get("published_at")))
+
+
+def stamp(s):
+    """日時を日本時間の YYYYMMDDhhmmss の数字にする。同じ日の中も秒まで見て並べるため"""
     if not s:
         return 0
     try:
@@ -263,6 +269,16 @@ def catalog():
     for h in set(fresh) - main:
         fetched[h] = today
 
+    # 並べる日時は、前から載っている商品は前回のままにする（公式が一斉に公開し直しても並びが崩れないように）。
+    # 登録日時だけで並べていた頃の商品（recheck）は、次に取れたときに一度だけ付け直す
+    if state.get("date_basis") != "added":
+        state["date_basis"], state["recheck"] = "added", sorted(prev)
+    recheck = set(state.get("recheck", []))
+    for h, r in fresh.items():
+        if h in prev and h not in recheck:
+            r[8] = prev[h][8]
+    recheck -= set(fresh)
+
     # 取れなかった商品は前回のデータで埋める
     known = listed if len(listed) > 1000 else prev   # サイトマップを取れなかったときは前回の商品を全部残す
     reused = 0
@@ -278,6 +294,7 @@ def catalog():
         print(f"  まだ一度も取れていない商品: {sum(1 for h in listed if h not in fresh)}件", flush=True)
 
     state["fetched"] = {h: d for h, d in fetched.items() if h in fresh and h not in main}
+    state["recheck"] = sorted(recheck)
     STATE.parent.mkdir(parents=True, exist_ok=True)
     STATE.write_text(json.dumps(state, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     return list(fresh.values())

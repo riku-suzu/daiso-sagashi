@@ -67,7 +67,7 @@
   }
   // 並び順は 2 つだけ。ダイソーは値段の幅が小さいので、安い順・高い順は置かない
   //   おすすめ：検索語によく合う順（在庫あり・新しめを少し上げる）。検索語がなければ、在庫ありを先に新しい順
-  //   新着：ネットストアに登録された日時が新しい順（公式の新着順と同じく秒まで見る）
+  //   新着：ネットストアに追加された日時（登録・公開の遅いほう）が新しい順。後から公開・再掲載した商品も上に来る
   function sortList(list) {
     if (state.sort === "new") return list.slice().sort((a, b) => b.item.created - a.item.created);
     // 色は虹の順。色のない商品は最後。同じ色の中は今の並び（検索の順）のまま
@@ -153,7 +153,7 @@
     if (state.cat.length) chips.push([state.cat.join(" › "), () => (state.cat = [])]);
     if (state.price) chips.push([state.price === "basic" ? "100円の商品" : "100円以外の商品", () => (state.price = "")]);
     if (state.stock) chips.push(["ネット在庫あり", () => (state.stock = false)]);
-    if (state.fresh) chips.push(["30日以内に登録", () => (state.fresh = false)]);
+    if (state.fresh) chips.push(["30日以内に追加", () => (state.fresh = false)]);
     if (!state.hideDiscon) chips.push(["廃盤も表示", () => (state.hideDiscon = true)]);
     chipActions = chips.map((c) => c[1]);
     // 新しく付いた条件のチップだけ、ふわっと出す
